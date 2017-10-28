@@ -1,11 +1,10 @@
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedList;
 
-public class QueryKeyWordHandler {
+public class QueryOrderByHandler {
 
-    public static void handleQueryKeyWords(String[] keyWords, LinkedList<DocumentProperties> list) throws Exception {
-        String property = keyWords[0];
-        String direction = keyWords[1];
+    public static void handleQueryKeyWords(String property, String direction, LinkedList<DocumentProperties> list) throws Exception {
 
         Comparator<DocumentProperties> c;
         boolean ascending;
@@ -14,11 +13,6 @@ public class QueryKeyWordHandler {
             c = DocumentProperties.BY_COUNT;
         } else if (property.equalsIgnoreCase("popularity")) {
             c = DocumentProperties.BY_POPULARITY;
-        } else if (property.equalsIgnoreCase("occurrence")) {
-            c = DocumentProperties.BY_OCCURRENCE;
-            //System.out.println();
-            //for(int i = 0; i < list.size(); i++)
-            //    System.out.print(list.get(i).getOccurrence() + "  ");
         } else {
             //handleQueryError();
             throw new Exception("False query");
@@ -33,13 +27,15 @@ public class QueryKeyWordHandler {
             throw new Exception("False query");
         }
 
-        //TODO BubbleSort.sort(list, c, ascending);
+        if(! ascending)
+            c = Collections.reverseOrder(c);
+        Collections.sort(list, c);
     }
 
     public static void handleQueryError() {
         System.out.println(
                 "Error, Query aborted: Query keywords format should be: orderby \"Property\" \"Direction\"\n" +
-                        "Property = count, popularity, occurrence\n" +
+                        "Property: relevance, popularity\n" +
                         "Direction: asc, desc"
         );
     }
