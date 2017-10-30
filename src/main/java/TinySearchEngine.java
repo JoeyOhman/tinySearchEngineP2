@@ -95,31 +95,47 @@ public class TinySearchEngine implements TinySearchEngineBase {
                 terms = temp;
             }
 
-
-            Stack<String> searchTokens = new Stack<String>();
-            boolean prevTokenT = false; // Checks whether last token was word or operator
+            // TODO probably doesn't work for all nested cases, operands and operators should be in the same stack!
+            Stack<String> operators = new Stack<String>();
+            Stack<LinkedList<DocumentProperties>> listOperands = new Stack<LinkedList<DocumentProperties>>();
+            boolean prevTokenT = false; // Checks whether last token was a word
+            boolean beforeLastOperatorT = false; // Checks whether token before last operator is a word
 
             for (String token : terms) {
 
-
                 if (token.equals("|") || token.equals("+") || token.equals("-")) {
-                    searchTokens.push(token);
+                    operators.push(token);
+                    if(prevTokenT)
+                        beforeLastOperatorT = true;
+                    else
+                        beforeLastOperatorT = false;
+
                     prevTokenT = false;
                 } else {
                     // It is a word
                     if (prevTokenT) {
-                        String operand1 = searchTokens.pop(), operand2 = token, operator = searchTokens.pop();
-                        List<DocumentProperties> tempList = query(operand1, operand2, operator);
-                        if (tempList != null)
-                            result.addAll(tempList);
-                        prevTokenT = false;
+                        List<DocumentProperties> operand1 = listOperands.pop(), operand2 = words.get(token);
+                        String operator = operators.pop();
+                        listOperands.push(query(operand1, operand2, operator));
+
+                        if(beforeLastOperatorT) {
+                            operand2 = listOperands.pop();
+                            operand1 = listOperands.pop();
+                            operator = operators.pop();
+                            listOperands.push(query(operand1, operand2, operator));
+                        }
                     } else {
-                        searchTokens.push(token);
-                        prevTokenT = true;
+                        listOperands.push(words.get(token));
                     }
+                    prevTokenT = true;
                 }
 
             }
+
+            result = listOperands.pop();
+
+            System.out.println("SIZE OF OPERAND STACK WHEN DONE: " + listOperands.size());
+            System.out.println("SIZE OF OPERATOR STACK WHEN DONE: " + operators.size());
 
             if (orderBy) {
                 try {
@@ -142,16 +158,16 @@ public class TinySearchEngine implements TinySearchEngineBase {
         return resultDocuments;
     }
 
-    private List<DocumentProperties> query(String operand1, String operand2, String operator) {
+    private LinkedList<DocumentProperties> query(List<DocumentProperties> operand1, List<DocumentProperties> operand2, String operator) {
 
         LinkedList<DocumentProperties> res;
 
         if (operator.equals("|")) {
-            res = union(words.get(operand1), words.get(operand2));
+            res = union(operand1, operand2);
         } else if(operator.equals("+")) {
-            res = intersection(words.get(operand1), words.get(operand2));
+            res = intersection(operand1, operand2);
         } else {
-            res = difference(words.get(operand1), words.get(operand2));
+            res = difference(operand1, operand2);
         }
 
         return res;
