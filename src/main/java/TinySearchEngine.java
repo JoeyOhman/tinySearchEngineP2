@@ -4,20 +4,20 @@ import se.kth.id1020.util.Document;
 import se.kth.id1020.util.Sentence;
 import se.kth.id1020.util.Word;
 
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Stack;
+import java.util.*;
 
 public class TinySearchEngine implements TinySearchEngineBase {
 
     private HashMap<String, LinkedList<DocumentProperties>> words;
     private HashMap<Document, Integer> documents;
 
+    private LinkedList<Entry<QueryFormat, LinkedList<DocumentProperties>>> cache;
+
     public TinySearchEngine() {
         words = new HashMap<String, LinkedList<DocumentProperties>>(); // Key = Word, Value = list of docs
         documents = new HashMap<Document, Integer>(); // Key = doc, Value = amountOfWordsInDoc
 
+        cache = new LinkedList<Entry<QueryFormat, LinkedList<DocumentProperties>>>();
     }
 
     public void preInserts() {
@@ -67,6 +67,12 @@ public class TinySearchEngine implements TinySearchEngineBase {
 
     public void postInserts() {
 
+        for (Map.Entry<String, LinkedList<DocumentProperties>> entry : words.entrySet()) {
+            for (DocumentProperties docP : entry.getValue()) {
+                docP.setTfidf(tfidf(entry.getKey(), docP.getDocument()));
+            }
+        }
+
     }
 
     public List<Document> search(String s) {
@@ -76,58 +82,60 @@ public class TinySearchEngine implements TinySearchEngineBase {
         String[] terms = s.split(" ");
         String property = "", direction = "";
 
-        if(terms.length == 1) {
-            if(words.get(terms[0]) != null)
-                result.addAll(words.get(terms[0]));
-        } else {
+        boolean orderBy = false;
+        if (terms.length > 3 && terms[terms.length - 3].equalsIgnoreCase("orderby")) {
+            orderBy = true;
+            property = terms[terms.length - 2];
+            direction = terms[terms.length - 1];
 
-            boolean orderBy = false;
-            if (terms.length > 3 && terms[terms.length - 3].equalsIgnoreCase("orderby")) {
-                orderBy = true;
-                property = terms[terms.length - 2];
-                direction = terms[terms.length - 1];
-
-                String[] temp = new String[terms.length - 3];
+            String[] temp = new String[terms.length - 3];
             /*for (int i = 0; i < terms.length - 3; i++) {
                 temp[i] = terms[i];
             }*/
-                System.arraycopy(terms, 0, temp, 0, terms.length - 3);
-                terms = temp;
-            }
+            System.arraycopy(terms, 0, temp, 0, terms.length - 3);
+            terms = temp;
+        }
 
-            // TODO probably doesn't work for all nested cases, operands and operators should be in the same stack!
+        if (terms.length == 1) {
+            if (words.get(terms[0]) != null)
+                result.addAll(words.get(terms[0]));
+        } else {
+
             Stack<String> operators = new Stack<String>();
             Stack<LinkedList<DocumentProperties>> listOperands = new Stack<LinkedList<DocumentProperties>>();
-            boolean prevTokenT = false; // Checks whether last token was a word
-            boolean beforeLastOperatorT = false; // Checks whether token before last operator is a word
+            Stack<Boolean> operand = new Stack<Boolean>(); // To keep track of when to pop from which stack
 
             for (String token : terms) {
 
                 if (token.equals("|") || token.equals("+") || token.equals("-")) {
+                    operand.push(false);
                     operators.push(token);
-                    if(prevTokenT)
-                        beforeLastOperatorT = true;
-                    else
-                        beforeLastOperatorT = false;
-
-                    prevTokenT = false;
                 } else {
                     // It is a word
-                    if (prevTokenT) {
-                        List<DocumentProperties> operand1 = listOperands.pop(), operand2 = words.get(token);
+                    if (operand.peek()) {
+                        operand.pop();
+                        LinkedList<DocumentProperties> operand1 = listOperands.pop(), operand2 = words.get(token);
+                        operand.pop();
                         String operator = operators.pop();
+                        boolean combineAgain = operand.size() > 0 ? operand.peek() : false;
+                        operand.push(true);
                         listOperands.push(query(operand1, operand2, operator));
 
-                        if(beforeLastOperatorT) {
+                        while (combineAgain) {
+                            operand.pop();
                             operand2 = listOperands.pop();
+                            operand.pop();
                             operand1 = listOperands.pop();
+                            operand.pop();
                             operator = operators.pop();
+                            combineAgain = operand.size() > 0 ? operand.peek() : false;
+                            operand.push(true);
                             listOperands.push(query(operand1, operand2, operator));
                         }
                     } else {
+                        operand.push(true);
                         listOperands.push(words.get(token));
                     }
-                    prevTokenT = true;
                 }
 
             }
@@ -136,39 +144,121 @@ public class TinySearchEngine implements TinySearchEngineBase {
 
             System.out.println("SIZE OF OPERAND STACK WHEN DONE: " + listOperands.size());
             System.out.println("SIZE OF OPERATOR STACK WHEN DONE: " + operators.size());
+        }
 
-            if (orderBy) {
-                try {
-                    QueryOrderByHandler.handleQueryKeyWords(property, direction, result);
-                } catch (Exception e) {
-                    QueryOrderByHandler.handleQueryError();
-                    return null;
-                }
+        if (orderBy) {
+            try {
+                QueryOrderByHandler.handleQueryKeyWords(property, direction, result);
+            } catch (Exception e) {
+                QueryOrderByHandler.handleQueryError();
+                return null;
             }
         }
 
         LinkedList<Document> resultDocuments = new LinkedList<Document>();
-        //System.out.println("Occurrences: ");
+
         for (DocumentProperties docP : result) {
             resultDocuments.add(docP.getDocument());
-            //System.out.print("  " + docP.combinedOccurrence);
+            //System.out.println("Relevance: " + docP.getTfidf());
         }
-        //System.out.println();
+
+        //System.out.println("Cache size: " + cache.size());
 
         return resultDocuments;
     }
 
-    private LinkedList<DocumentProperties> query(List<DocumentProperties> operand1, List<DocumentProperties> operand2, String operator) {
+    public String infix(String s) {
+
+        String[] terms = s.split(" ");
+        String property = "", direction = "";
+        String result;
+
+        boolean orderBy = false;
+        if (terms.length > 3 && terms[terms.length - 3].equalsIgnoreCase("orderby")) {
+            orderBy = true;
+            property = terms[terms.length - 2];
+            direction = terms[terms.length - 1];
+
+            String[] temp = new String[terms.length - 3];
+            System.arraycopy(terms, 0, temp, 0, terms.length - 3);
+            terms = temp;
+        }
+
+        Stack<String> operators = new Stack<String>();
+        Stack<String> operands = new Stack<String>();
+        Stack<Boolean> operand = new Stack<Boolean>(); // To keep track of when to pop from which stack
+
+        if (terms.length == 1) {
+            //result = "Query(" + terms[0] + ")";
+            operands.push(terms[0]);
+        } else {
+
+
+            for (String token : terms) {
+
+                if (token.equals("|") || token.equals("+") || token.equals("-")) {
+                    operand.push(false);
+                    operators.push(token);
+                } else {
+                    // It is a word
+                    if (operand.peek()) {
+                        operand.pop();
+                        String operand1 = operands.pop(), operand2 = token;
+                        operand.pop();
+                        String operator = operators.pop();
+                        boolean combineAgain = operand.size() > 0 ? operand.peek() : false;
+                        operand.push(true);
+                        operands.push("(" + operand1 + " " + operator + " " + operand2 + ")");
+
+                        while (combineAgain) {
+                            operand.pop();
+                            operand2 = operands.pop();
+                            operand.pop();
+                            operand1 = operands.pop();
+                            operand.pop();
+                            operator = operators.pop();
+                            combineAgain = operand.size() > 0 ? operand.peek() : false;
+                            operand.push(true);
+                            operands.push("(" + operand1 + " " + operator + " " + operand2 + ")");
+                        }
+                    } else {
+                        operand.push(true);
+                        operands.push(token);
+                    }
+                }
+            }
+
+        }
+        result = "Query(" + operands.pop();
+        if (orderBy)
+            result += " ORDERBY " + property.toUpperCase() + " " + direction.toUpperCase() + ")";
+        else
+            result += ")";
+
+
+        return result;
+    }
+
+    private LinkedList<DocumentProperties> query(LinkedList<DocumentProperties> operand1, LinkedList<DocumentProperties> operand2, String operator) {
+
+        QueryFormat queryFormat = new QueryFormat(operand1, operand2, operator);
+
+        for(Entry<QueryFormat, LinkedList<DocumentProperties>> e : cache) {
+            if(QueryFormat.equivalent(queryFormat, e.getKey()))
+                return e.getValue();
+        }
 
         LinkedList<DocumentProperties> res;
 
         if (operator.equals("|")) {
             res = union(operand1, operand2);
-        } else if(operator.equals("+")) {
+        } else if (operator.equals("+")) {
             res = intersection(operand1, operand2);
         } else {
             res = difference(operand1, operand2);
         }
+
+        cache.addFirst(new Entry<QueryFormat, LinkedList<DocumentProperties>>(queryFormat, res));
 
         return res;
     }
@@ -178,8 +268,8 @@ public class TinySearchEngine implements TinySearchEngineBase {
         if (list1 != null)
             union.addAll(list1);
         if (list2 != null) {
-            for(DocumentProperties docP : list2) {
-                if(!docPropListContainsDoc(union, docP.getDocument()))
+            for (DocumentProperties docP : list2) {
+                if (!docPropListContainsDoc(union, docP.getDocument()))
                     union.add(docP);
             }
         }
@@ -190,8 +280,8 @@ public class TinySearchEngine implements TinySearchEngineBase {
 
         LinkedList<DocumentProperties> intersection = new LinkedList<DocumentProperties>();
 
-        for(DocumentProperties docP : list1) {
-            if(docPropListContainsDoc(list2, docP.getDocument()))
+        for (DocumentProperties docP : list1) {
+            if (docPropListContainsDoc(list2, docP.getDocument()))
                 intersection.add(docP);
         }
 
@@ -202,8 +292,8 @@ public class TinySearchEngine implements TinySearchEngineBase {
 
         LinkedList<DocumentProperties> difference = new LinkedList<DocumentProperties>();
 
-        for(DocumentProperties docP : list1) {
-            if(! docPropListContainsDoc(list2, docP.getDocument()))
+        for (DocumentProperties docP : list1) {
+            if (!docPropListContainsDoc(list2, docP.getDocument()))
                 difference.add(docP);
         }
 
@@ -211,22 +301,18 @@ public class TinySearchEngine implements TinySearchEngineBase {
     }
 
     private boolean docPropListContainsDoc(List<DocumentProperties> list, Document doc) {
-        if(list == null || doc == null)
+        if (list == null || doc == null)
             return false;
 
-        for(DocumentProperties docPRes : list) {
-            if(doc == docPRes.getDocument())
+        for (DocumentProperties docPRes : list) {
+            if (doc == docPRes.getDocument())
                 return true;
         }
         return false;
     }
 
-    public String infix(String s) {
-        return null;
-    }
-
-    private int appearancesOfWordInDoc(Word word, Document document) {
-        for (DocumentProperties docP : words.get(word.word)) {
+    private int appearancesOfWordInDoc(String word, Document document) {
+        for (DocumentProperties docP : words.get(word)) {
             if (docP.getDocument() == document)
                 return docP.count;
         }
@@ -241,13 +327,13 @@ public class TinySearchEngine implements TinySearchEngineBase {
         return documents.size();
     }
 
-    private int amountOfDocumentsContains(Word word) {
-        return words.get(word.word).size();
+    private int amountOfDocumentsContains(String word) {
+        return words.get(word).size();
     }
 
-    private double tfidf(Word word, Document doc) {
-        double tf = appearancesOfWordInDoc(word, doc) / amountOfWordsInDoc(doc);
-        double idf = Math.log10(amountOfDocuments() / amountOfDocumentsContains(word));
+    private double tfidf(String word, Document doc) {
+        double tf = (double) appearancesOfWordInDoc(word, doc) / amountOfWordsInDoc(doc);
+        double idf = Math.log10((double) amountOfDocuments() / amountOfDocumentsContains(word));
         return tf * idf;
     }
 }

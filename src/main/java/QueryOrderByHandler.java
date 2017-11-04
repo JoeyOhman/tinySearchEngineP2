@@ -9,8 +9,8 @@ public class QueryOrderByHandler {
         Comparator<DocumentProperties> c;
         boolean ascending;
 
-        if (property.equalsIgnoreCase("count")) {
-            c = DocumentProperties.BY_COUNT;
+        if (property.equalsIgnoreCase("relevance")) {
+            c = DocumentProperties.BY_RELEVANCE;
         } else if (property.equalsIgnoreCase("popularity")) {
             c = DocumentProperties.BY_POPULARITY;
         } else {

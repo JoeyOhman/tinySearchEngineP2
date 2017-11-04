@@ -5,12 +5,14 @@ import java.util.Comparator;
 
 public class DocumentProperties {
 
-    public static final Comparator<DocumentProperties> BY_COUNT = new ByCount();
+    //public static final Comparator<DocumentProperties> BY_COUNT = new ByCount();
     public static final Comparator<DocumentProperties> BY_POPULARITY = new ByPopularity();
+    public static final Comparator<DocumentProperties> BY_RELEVANCE = new ByRelevance();
 
 
     private final Attributes attributes;
     public int count = 1; // Only created when word occurred
+    private double tfidf;
 
     public DocumentProperties(Attributes attributes) {
         this.attributes = attributes;
@@ -28,26 +30,20 @@ public class DocumentProperties {
         return attributes.occurrence;
     }
 
-    /*
-    public boolean equals(Object o) {
-        if(o == null)
-            return false;
-
-        if(! (this.getClass() == o.getClass()))
-            return false;
-
-        // They are instances of same class, cast and compare documents
-        if(this.getDocument() == ((DocumentProperties)o).getDocument())
-            return true;
-
-        return false;
+    public void setTfidf(double tfidf) {
+        this.tfidf = tfidf;
     }
-    */
 
-    private static class ByCount implements Comparator<DocumentProperties> {
+    double getTfidf() {
+        return tfidf;
+    }
+
+    private static class ByRelevance implements Comparator<DocumentProperties> {
 
         public int compare(DocumentProperties docP1, DocumentProperties docP2) {
-            return docP1.count - docP2.count; // No risk of overflow since these ints cant be negative
+            //System.out.println("docP1 relevance: " + docP1.tfidf + " docP2 relevance: " + docP2.tfidf);
+            return Double.compare(docP1.tfidf, docP2.tfidf);
+            //return (int)(docP1.tfidf - docP2.tfidf);
         }
     }
 
