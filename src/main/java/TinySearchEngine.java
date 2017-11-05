@@ -13,6 +13,8 @@ public class TinySearchEngine implements TinySearchEngineBase {
 
     private LinkedList<Entry<QueryFormat, LinkedList<DocumentProperties>>> cache;
 
+    private int searchId = 0;
+
     public TinySearchEngine() {
         words = new HashMap<String, LinkedList<DocumentProperties>>(); // Key = Word, Value = list of docs
         documents = new HashMap<Document, Integer>(); // Key = doc, Value = amountOfWordsInDoc
@@ -80,6 +82,7 @@ public class TinySearchEngine implements TinySearchEngineBase {
 
     public List<Document> search(String s) {
 
+        searchId++;
         LinkedList<DocumentProperties> result = new LinkedList<DocumentProperties>();
 
         String[] terms = s.split(" ");
@@ -162,7 +165,7 @@ public class TinySearchEngine implements TinySearchEngineBase {
 
         for (DocumentProperties docP : result) {
             resultDocuments.add(docP.getDocument());
-            //System.out.println("Relevance: " + docP.getTfidf());
+            System.out.println("Combined Relevance: " + docP.getCombinedTfidf(searchId));
         }
 
         //System.out.println("Cache size: " + cache.size());
@@ -271,10 +274,23 @@ public class TinySearchEngine implements TinySearchEngineBase {
         if (list1 != null)
             union.addAll(list1);
         if (list2 != null) {
-            for (DocumentProperties docP : list2) {
-                if (!docPropListContainsDoc(union, docP.getDocument()))
-                    union.add(docP);
-                
+            //for (DocumentProperties docP : list2) {
+            //    if (!docPropListContainsDoc(union, docP.getDocument()))
+            //        union.add(docP);
+            //
+            //}
+            for(DocumentProperties newDocP : list2) {
+                boolean docExistsInUnion = false;
+                for(DocumentProperties unionDocP : union) {
+                    if(newDocP.getDocument() == unionDocP.getDocument()) {
+                        unionDocP.setCombinedTfidf(unionDocP.getCombinedTfidf(searchId) + newDocP.getCombinedTfidf(searchId), searchId);
+                        docExistsInUnion = true;
+                    }
+                }
+                if(! docExistsInUnion) {
+                    newDocP.setCombinedTfidf(newDocP.getCombinedTfidf(searchId), searchId);
+                    union.add(newDocP);
+                }
             }
         }
         return union;
@@ -284,9 +300,22 @@ public class TinySearchEngine implements TinySearchEngineBase {
 
         LinkedList<DocumentProperties> intersection = new LinkedList<DocumentProperties>();
 
-        for (DocumentProperties docP : list1) {
-            if (docPropListContainsDoc(list2, docP.getDocument()))
-                intersection.add(docP);
+        //for (DocumentProperties docP : list1) {
+        //    if (docPropListContainsDoc(list2, docP.getDocument()))
+        //        intersection.add(docP);
+        //}
+
+        for(DocumentProperties docP1 : list1) {
+            boolean docExistsInList2 = false;
+            for(DocumentProperties docP2 : list2) {
+                if(docP1.getDocument() == docP2.getDocument()) {
+                    docP1.setCombinedTfidf(docP1.getCombinedTfidf(searchId) + docP2.getCombinedTfidf(searchId), searchId);
+                    docExistsInList2 = true;
+                }
+            }
+            if(docExistsInList2) {
+                intersection.add(docP1);
+            }
         }
 
         return intersection;
