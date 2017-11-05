@@ -73,6 +73,9 @@ public class TinySearchEngine implements TinySearchEngineBase {
             }
         }
 
+        //System.out.println("words: " + words.size());
+        //System.out.println("documents: " + documents.size());
+
     }
 
     public List<Document> search(String s) {
@@ -271,6 +274,7 @@ public class TinySearchEngine implements TinySearchEngineBase {
             for (DocumentProperties docP : list2) {
                 if (!docPropListContainsDoc(union, docP.getDocument()))
                     union.add(docP);
+                
             }
         }
         return union;

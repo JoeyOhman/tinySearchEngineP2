@@ -12,7 +12,7 @@ public class DocumentProperties {
 
     private final Attributes attributes;
     public int count = 1; // Only created when word occurred
-    private double tfidf;
+    private double tfidf, combinedTfidf;
 
     public DocumentProperties(Attributes attributes) {
         this.attributes = attributes;
@@ -36,6 +36,14 @@ public class DocumentProperties {
 
     double getTfidf() {
         return tfidf;
+    }
+
+    void setCombinedTfidf(double combinedTfidf) {
+        this.combinedTfidf = combinedTfidf;
+    }
+
+    double getCombinedTfidf() {
+        return combinedTfidf;
     }
 
     private static class ByRelevance implements Comparator<DocumentProperties> {
